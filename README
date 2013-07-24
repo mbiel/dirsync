@@ -1,0 +1,45 @@
+Mike Bielagus
+CSCI E-251 Project 3
+
+The objective of this project is to create a program "dirsync" that will synchronize two directories.
+
+The basic structures are outlined in dirsynctypes.h. A fileItem struct holds information about a file or 
+directory: its name and its stat struct. For ease of sorting and searching, I wanted to use arrays instead of 
+linked lists or some other structure to hold lists of files, so a fileList is basically a simple resizing array of pointers to fileItems. 
+It has a minimum capacity of 4, and doubles this capacity when needed. Finally, a Directory holds a list of files 
+and a list of subdirectories.
+
+When dirsync is called, it first generates Directories from the arguments passed to it. Files and symlinks go into 
+the file list, directories go into the subdirectory list, and other types are ignored. Then, it attempts to copy any files 
+from the first directory into the second if they are not already there, and then does the same from the second to the first.
+
+This works by going through each fileItem in directory 1's file list, and trying to find it in directory 2's file list. 
+If it is not found, it is copied, the item is added to the other directory's file list, and chmod and utime are used to 
+set the copied file's protection, access and modification times to be the same as the original's. Symlinks are an exception to this 
+behavior. utime follows symlinks, and I did not come up with a way to change the actual symlink's times in time. lutimes, 
+which is available on my system, would work, but it does not seem to be on the nice system. 
+
+If a file with the same name is found in directory 2's list, the behavior differs depending on whether the file is a symlink or a regular file. 
+If it is a regular file, the modification times are compared. If they are the same, the sizes are checked. If the sizes are the same, it is assumed 
+that the files are identical and nothing is to be done. If the sizes are different, the program outputs an error and moves on 
+to the next file. If the modification times are different, whichever is more recent is copied to the other directory, overwriting the 
+older file. With symlinks, since we do not control the modification time, we need another method to tell whether they are 'the same.' 
+For this, the program tries to determine if the symlinks point to the same thing. If they do, no action is taken. If they do not, then 
+the program looks at the modification times and copies the more recent one over.
+
+Next, we do the same thing, but with subdirectories. If a subdirectory with a given name exists in both directories, dirsync is called 
+on the subdirectories, to check that the contents are the same. If a subdirectory exists in one directory but not the other, 
+a new directory is created with identical permissions and modification/access times. Then dirsync is called recursively on the 
+identically named subdirectories, which should copy everything from the old to the new. The only complication with this is that 
+we do not want to copy a directory into itself or into a subdirectory of itself. This will result in an infinite loop of copying until 
+the program runs out of memory. To deal with this, the unsafeToCopy function is used to determine whether it will be safe to copy a 
+subdirectory. It does this by looking at the destination directory, walking up by repeatedly opening '..', until it is impossible 
+to go up any further, in which case the root has been reached and it is ok to copy, or a directory is found with an inode matching 
+that of the directory to be copied, in which case it is unsafe to copy.
+
+The usage of the program is: dirsync [OPTIONS] [directory1] [directory2]
+The only possible options are:
+  -h: prints help
+  -o: prints output to stdout (can be directed to a file as: dirsync -o dir1 dir2 > dirsynclog)
+
+Finally, the typescript file "dirsyncrun" shows the operation of the program.
